@@ -1,0 +1,12 @@
+name: async_await
+version: 0.1.0
+
+authors:
+  - firejox <firejox@gmail.com>
+
+description: |
+  async/await for Crystal
+
+crystal: 0.20.1
+
+license: MIT
