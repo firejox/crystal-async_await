@@ -2,7 +2,7 @@ require "gc"
 require "./task"
 
 module AsyncAwait
-  class AsyncCall
+  private class AsyncCall
     @[ThreadLocal]
     @@current : self? # current async call
 
@@ -29,12 +29,12 @@ module AsyncAwait
     end
 
     @[NoInline]
-    protected def restore_stack
+    def restore_stack
       @local_vars.try &.copy_to(@sp, @fp.address - @sp.address)
     end
 
     @[NoInline]
-    protected def dump_stack
+    def dump_stack
       @local_vars = GC.malloc_atomic(@fp.address - @sp.address)
       @local_vars.try &.copy_from(@sp, @fp.address - @sp.address)
     end
@@ -44,7 +44,11 @@ module AsyncAwait
     end
   end
 
-  def async_call_and_task_builder(block : -> R) forall R
+  def self.current_call
+    AsyncCall.current
+  end
+
+  def self.async_call_and_task_builder(block : -> R) forall R
     task = Task(R).new
     async_call = AsyncCall.new task
     task.proc = ->{
@@ -61,11 +65,11 @@ module AsyncAwait
         if async_call.awaitee
           Thread.current.queue.push task
         else
-          task.status = Status::COMPLETE
+          task.status = Status::COMPLETED
         end
       rescue ex
         task.exception = ex
-        task.status = Status::FAULT
+        task.status = Status::FAULTED
       ensure
         async_call.pop
       end

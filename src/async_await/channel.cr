@@ -3,42 +3,8 @@ require "thread/mutex"
 require "./task_completion_source"
 
 module AsyncAwait
-  class ChannelClosedError < Exception
-    def initialize(mag = "Channel is closed")
-      super(msg)
-    end
-  end
-
-  module Channel(T)
-    def self.new(capacity) : Channel(T)
-      BufferedChannel(T).new capacity
-    end
-
-    def self.new : Channel(T)
-      BufferedChannel(T).new 0
-    end
-
-    abstract def send(value : T) : TaskInterface
-    abstract def receive : TaskInterface
-
-    abstract def send_with_csp(value : T)
-    abstract def receive_with_csp : T
-
-    abstract def close
-    abstract def closed?
-
-    abstract def full?
-    abstract def empty?
-
-    private def raise_if_closed
-      raise ChannelClosedError.new if closed?
-    end
-  end
-
-  class BufferedChannel(T)
-    include Channel(T)
-
-    def initialze(@capacity = 32)
+  class Channel(T)
+    def initialize(@capacity = 0)
       @queue = Deque(TaskCompletionSource(T)).new
       @status = 0
       @send_wait = Deque(Tuple(TaskCompletionSource(T), TaskCompletionSource(Nil))).new
@@ -60,7 +26,7 @@ module AsyncAwait
           elsif @status >= 0
             tcs = TaskCompletionSource(T).new
             tcs.value = value
-            @queue.push tcs.task
+            @queue.push tcs
             @status += 1
             return Task(Nil).new nil
           else
@@ -73,7 +39,7 @@ module AsyncAwait
       end
     end
 
-    def send(value : T, wait_tcs : TaskCompletionSource(Nil))
+    def send(value : T, wait_tcs : TaskCompletionSource(Nil)) : Nil
       @mutex.synchronize do |mtx|
         raise_if_closed
         loop do
@@ -86,7 +52,7 @@ module AsyncAwait
             tcs = TaskCompletionSource(T).new
             tcs.value = value
             if wait_tcs.try_set_value? nil
-              @queue.push tcs.task
+              @queue.push tcs
               @status += 1
             end
           else
@@ -109,8 +75,6 @@ module AsyncAwait
 
     def receive : TaskInterface
       @mutex.synchronize do |mtx|
-        raise_if_closed
-
         loop do
           if tuple = @send_wait.shift?
             next unless tuple[1].try_set_value? nil
@@ -122,6 +86,7 @@ module AsyncAwait
             @status -= 1
             return tcs.task
           else
+            raise_if_closed
             tcs = TaskCompletionSource(T).new
             @queue.push tcs
             @status -= 1
@@ -131,10 +96,8 @@ module AsyncAwait
       end
     end
 
-    def recieve(tcs : TaskCompletionSource(T))
+    def receive(tcs : TaskCompletionSource(T)) : Nil
       @mutex.synchronize do |mtx|
-        raise_if_closed
-
         loop do
           if tuple = @send_wait.shift?
             next unless tuple[1].try_set_value? nil
@@ -151,6 +114,7 @@ module AsyncAwait
               @status -= 1
             end
           else
+            raise_if_closed
             @queue.push tcs
             @status -= 1
           end
@@ -165,8 +129,8 @@ module AsyncAwait
       task.wait_with_csp
     end
 
-    def recieve_with_csp : T
-      task = recieve
+    def receive_with_csp : T
+      task = receive
       task.value_with_csp
     end
 
@@ -175,20 +139,16 @@ module AsyncAwait
         @closed = true
         if @status < 0
           @queue.each do |tcs|
-            tcs.try_set_exception? ChannelClosedError.new
+            tcs.try_set_exception? ::Channel::ClosedError.new
           end
+          @queue.clear
+          @status = 0
         end
-        @send_wait.each do |tuple|
-          tuple[1].try_set_exception? ChannelClosedError.new
-        end
-        @queue.clear
-        @send_wait.clear
-        @status = 0
       end
     end
 
     def close?
-      @close
+      @closed
     end
 
     def full?
@@ -206,5 +166,11 @@ module AsyncAwait
         @send_wait.empty?
       end
     end
+
+    private def raise_if_closed
+      raise ::Channel::ClosedError.new if close?
+    end
   end
 end
+
+alias AAChannel = AsyncAwait::Channel

@@ -2,12 +2,17 @@ require "fiber"
 require "./awaitable"
 
 module AsyncAwait
-  module TaskInterface
+  abstract class TaskInterface
     include Awaitable
 
-    abstract def proc
+    def proc : Proc(Nil)?
+      nil
+    end
 
-    abstract def value_with_csp
+    def value_with_csp
+      wait_with_csp
+      nil
+    end
 
     def wait
       wait { }
@@ -24,10 +29,9 @@ module AsyncAwait
     end
   end
 
-  class Task(T)
-    include TaskInterface
+  class Task(T) < TaskInterface
     @value : T?
-    getter status : Status
+    @status : Status
     getter exception : Exception?
     getter proc : ->
 
@@ -36,30 +40,35 @@ module AsyncAwait
       @status = Status::INCOMPLETE
     end
 
-    def initalize(@value : T)
+    def initialize(@value : T)
       @proc = Proc(Void).new { }
-      @status = Status::COMPLETE
+      @status = Status::COMPLETED
     end
 
     def value
       wait
       case @status
-      when Status::COMPLETE
+      when Status::COMPLETED
         return @value.as(T)
-      when Status::FAULT
-        raise @exception
+      when Status::FAULTED
+        raise @exception.not_nil!
       else
         raise "Invalid Task Status"
       end
     end
 
+    @[NoInline]
+    def status
+      @status
+    end
+
     def value_with_csp
       wait_with_csp
       case @status
-      when Status::COMPLETE
+      when Status::COMPLETED
         return @value.as(T)
-      when Status::FAULT
-        raise @exception
+      when Status::FAULTED
+        raise @exception.not_nil!
       else
         raise "Invalid Task Status"
       end
@@ -77,11 +86,18 @@ module AsyncAwait
     protected def proc=(@proc)
     end
 
+    def self.from_exception(exception : Exception)
+      task = new
+      task.exception = exception
+      task.status = Status::FAULTED
+      task
+    end
+
     def self.yield : Awaitable
       YieldAwaitable.new
     end
 
-    private class YieldAwaitable
+    class YieldAwaitable
       include Awaitable
 
       @status = Status::INCOMPLETE
@@ -92,8 +108,9 @@ module AsyncAwait
       def exception : Nil
       end
 
+      @[NoInline]
       def status
-        tmp, @status = @status, Status::COMPLETE
+        tmp, @status = @status, Status::COMPLETED
         tmp
       end
     end
@@ -102,9 +119,7 @@ module AsyncAwait
       TimedTask.new time
     end
 
-    private class TimedTask
-      include TaskInterface
-
+    private class TimedTask < TaskInterface
       @delay : Time::Span?
       @cur_time = Time.now
       @status = Status::INCOMPLETE
@@ -119,20 +134,17 @@ module AsyncAwait
       def exception : Nil
       end
 
-      def proc : Nil
-      end
-
-      def value_with_csp : Nil
-        wait_with_csp
-      end
-
+      @[NoInline]
       def status
         delay = @delay.not_nil!
         if delay.ticks != -1 && (Time.now - @cur_time) >= delay
-          @status = Status::COMPLETE
+          @status = Status::COMPLETED
         end
         @status
       end
     end
   end
 end
+
+alias TaskInterface = AsyncAwait::TaskInterface
+alias Task = AsyncAwait::Task

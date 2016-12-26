@@ -24,6 +24,11 @@ end
 
 another way for concurrent
 
+# Roadmap
+- [ ] Thread Pool Support
+- [ ] Cancellation for Task
+- [ ] Test more
+
 ## Contributing
 
 1. Fork it ( https://github.com/firejox/async_await/fork )

@@ -1,9 +1,17 @@
 require "./spec_helper"
 
-describe AsyncAwait do
-  # TODO: Write tests
+async def foo
+  await Task.delay(Time::Span.new(0, 0, 1))
+end
 
-  it "works" do
-    false.should eq(true)
+describe AsyncAwait do
+  it "async/await work" do
+    a = Thread.async_test {
+      foo
+    }
+    start_time = Time.now
+    a.join
+    end_time = Time.now
+    (end_time - start_time).should be >= Time::Span.new(0, 0, 1)
   end
 end
