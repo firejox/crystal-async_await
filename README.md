@@ -1,4 +1,4 @@
-# async_await
+# async_await [![Build Status](https://travis-ci.org/firejox/async_await.svg)](https://travis-ci.org/firejox/async_await)
 
 async/await for Crystal
 
@@ -9,7 +9,7 @@ Add this to your application's `shard.yml`:
 ```yaml
 dependencies:
   async_await:
-    github: firejox/async_await
+    github: firejox/crystal-async_await
 ```
 
 ## Usage
@@ -25,13 +25,14 @@ end
 another way for concurrent
 
 # Roadmap
+- [ ] Async IO
 - [ ] Thread Pool Support
 - [ ] Cancellation for Task
 - [ ] Test more
 
 ## Contributing
 
-1. Fork it ( https://github.com/firejox/async_await/fork )
+1. Fork it ( https://github.com/firejox/crystal-async_await/fork )
 2. Create your feature branch (git checkout -b my-new-feature)
 3. Commit your changes (git commit -am 'Add some feature')
 4. Push to the branch (git push origin my-new-feature)
