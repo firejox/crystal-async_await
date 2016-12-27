@@ -63,7 +63,7 @@ module AsyncAwait
         async_call.fp = fp
         task.value = block.call
         if async_call.awaitee
-          Thread.current.queue.push task
+          Thread.current.channel.send task.proc
         else
           task.status = Status::COMPLETED
         end

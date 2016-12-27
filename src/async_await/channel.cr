@@ -9,7 +9,7 @@ module AsyncAwait
       @status = 0
       @send_wait = Deque(Tuple(TaskCompletionSource(T), TaskCompletionSource(Nil))).new
       @closed = false
-      @mutex = Thread::Mutex.new
+      @mutex = ::Thread::Mutex.new
     end
 
     def send(value : T) : TaskInterface
@@ -102,15 +102,14 @@ module AsyncAwait
           if tuple = @send_wait.shift?
             next unless tuple[1].try_set_value? nil
             @queue.push tuple[0]
-            ltcs = @queue.shift
-            unless tcs.try_set_value? ltcs.task.value
-              @queue.unshift ltcs
+            ltcs = @queue.first
+            if tcs.try_set_value? ltcs.task.value
+              @queue.shift
             end
           elsif @status > 0
-            ltcs = @queue.shift
-            unless tcs.try_set_value? ltcs.task.value
-              @queue.unshift ltcs
-            else
+            ltcs = @queue.first
+            if tcs.try_set_value? ltcs.task.value
+              @queue.shift
               @status -= 1
             end
           else
@@ -135,6 +134,7 @@ module AsyncAwait
     end
 
     def close
+      return if @closed
       @mutex.synchronize do |mtx|
         @closed = true
         if @status < 0
@@ -147,7 +147,7 @@ module AsyncAwait
       end
     end
 
-    def close?
+    def closed?
       @closed
     end
 
@@ -168,7 +168,7 @@ module AsyncAwait
     end
 
     private def raise_if_closed
-      raise ::Channel::ClosedError.new if close?
+      raise ::Channel::ClosedError.new if closed?
     end
   end
 end

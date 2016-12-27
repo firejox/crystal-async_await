@@ -2,17 +2,12 @@ require "fiber"
 require "./awaitable"
 
 module AsyncAwait
-  abstract class TaskInterface
+  module TaskInterface
     include Awaitable
 
-    def proc : Proc(Nil)?
-      nil
-    end
+    abstract def proc : Proc(Nil)?
 
-    def value_with_csp
-      wait_with_csp
-      nil
-    end
+    abstract def value_with_csp
 
     def wait
       wait { }
@@ -29,8 +24,9 @@ module AsyncAwait
     end
   end
 
-  class Task(T) < TaskInterface
-    @value : T?
+  class Task(T)
+    include TaskInterface
+    @value = uninitialized T
     @status : Status
     getter exception : Exception?
     getter proc : ->
@@ -119,7 +115,8 @@ module AsyncAwait
       TimedTask.new time
     end
 
-    private class TimedTask < TaskInterface
+    private class TimedTask
+      include TaskInterface
       @delay : Time::Span?
       @cur_time = Time.now
       @status = Status::INCOMPLETE
@@ -131,7 +128,14 @@ module AsyncAwait
         wait
       end
 
+      def value_with_csp : Nil
+        wait_with_csp
+      end
+
       def exception : Nil
+      end
+
+      def proc : Nil
       end
 
       @[NoInline]

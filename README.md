@@ -1,4 +1,4 @@
-# async_await [![Build Status](https://travis-ci.org/firejox/async_await.svg)](https://travis-ci.org/firejox/async_await)
+# async_await [![Build Status](https://travis-ci.org/firejox/crystal-async_await.svg)](https://travis-ci.org/firejox/crystal-async_await) 
 
 async/await for Crystal
 
