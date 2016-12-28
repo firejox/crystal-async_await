@@ -66,17 +66,23 @@ module AsyncAwait
     end
 
     protected def reset
-      @status.set Status::INCOMPLETE
+      unless @status.compare_and_set(Status::MAYCOMPLETE, Status::INCOMPLETE)[1]
+        raise InvalidOperation.new
+      end
     end
 
     protected def complete_set_value(value : T)
-      @status.set Status::COMPLETED
+      unless @status.compare_and_set(Status::MAYCOMPLETE, Status::COMPLETED)[1]
+        raise InvalidOperation.new
+      end
       @task.value = value
       @task.status = AAStatus::COMPLETED
     end
 
     protected def complete_set_exception(exception : Exception)
-      @status.set Status::FAULTED
+      unless @status.compare_and_set(Status::MAYCOMPLETE, Status::FAULTED)[1]
+        raise InvalidOperation.new
+      end
       @task.exception = exception
       @task.status = AAStatus::FAULTED
     end

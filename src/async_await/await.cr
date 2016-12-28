@@ -16,13 +16,15 @@ macro await(call)
 
       AsyncAwait.current_call.try do |%current|
         %current.current_ip = %ip
+
         if %awaitee.status == AAStatus::INCOMPLETE
           %current.dump_stack
           return nil
         end
-        %current.local_vars = nil
+        
         %current.awaitee = nil
-        break %awaitee.value
+        %current.current_ip
+        %awaitee.value
       end
     end
   {% else %}

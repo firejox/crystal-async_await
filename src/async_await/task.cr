@@ -140,6 +140,7 @@ module AsyncAwait
 
       @[NoInline]
       def status
+        return if @status != Status::INCOMPLETE
         delay = @delay.not_nil!
         if delay.ticks != -1 && (Time.now - @cur_time) >= delay
           @status = Status::COMPLETED

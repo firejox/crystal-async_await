@@ -1,4 +1,3 @@
-require "gc"
 require "./task"
 
 module AsyncAwait
@@ -35,7 +34,7 @@ module AsyncAwait
 
     @[NoInline]
     def dump_stack
-      @local_vars = GC.malloc_atomic(@fp.address - @sp.address)
+      @local_vars ||= GC.malloc_atomic(@fp.address - @sp.address)
       @local_vars.try &.copy_from(@sp, @fp.address - @sp.address)
     end
 
