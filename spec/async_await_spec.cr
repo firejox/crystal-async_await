@@ -1,9 +1,9 @@
 require "./spec_helper"
 
 class AAWrap
-  @@channel = AAChannel(Time::Span).new
-  @@tcs = TaskCompletionSource(Time::Span).new
-  
+  @@channel = AAChannel(Int32).new
+  @@tcs = TaskCompletionSource(Int32).new
+
   def self.channel
     @@channel
   end
@@ -14,17 +14,18 @@ class AAWrap
 end
 
 async def foo
-  stm = Time.now
-  await Task.delay(Time::Span.new(0, 0, 1))
-  etm = Time.now
-  AAWrap.channel.send(etm - stm)
+  await AAWrap.channel.send(123)
+  await AAWrap.channel.send(await AAWrap.channel.receive)
 end
 
 describe AsyncAwait do
   it "async/await work" do
+    task = uninitialized Task(Nil)
     a = async_spawn {
-      foo
+      task = foo
     }
-    AAWrap.channel.receive_with_csp.should be >= Time::Span.new(0, 0, 1)
+    AAWrap.channel.receive_with_csp.should eq(123)
+    AAWrap.channel.send_with_csp(321)
+    AAWrap.channel.receive_with_csp.should eq(321)
   end
 end

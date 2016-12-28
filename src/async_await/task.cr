@@ -115,13 +115,13 @@ module AsyncAwait
       TimedTask.new time
     end
 
+    # BUG : unknown why await could lead infinity wait
     private class TimedTask
       include TaskInterface
-      @delay : Time::Span?
-      @cur_time = Time.now
       @status = Status::INCOMPLETE
+      @cur_time = Time.now
 
-      def initialize(@delay)
+      def initialize(@delay : Time::Span)
       end
 
       def value : Nil
@@ -140,9 +140,7 @@ module AsyncAwait
 
       @[NoInline]
       def status
-        return if @status != Status::INCOMPLETE
-        delay = @delay.not_nil!
-        if delay.ticks != -1 && (Time.now - @cur_time) >= delay
+        if @delay.ticks != -1 && @delay.ago >= @cur_time
           @status = Status::COMPLETED
         end
         @status

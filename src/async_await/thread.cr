@@ -50,7 +50,7 @@ module AsyncAwait
       end
     end
 
-    LibC.pthread_once(pointerof(@@key_once), -> {
+    LibC.pthread_once(pointerof(@@key_once), ->{
       ret = LibC.pthread_key_create(pointerof(@@current_thread_key), ->(data : Void*) {
         @@threads.delete(data.as(Thread))
       })
@@ -67,13 +67,12 @@ module AsyncAwait
     end
 
     protected def start
-      LibC.pthread_once(pointerof(@@key_once), -> {
+      LibC.pthread_once(pointerof(@@key_once), ->{
         ret = LibC.pthread_key_create(pointerof(@@current_thread_key), ->(data : Void*) {
           @@threads.delete(data.as(Thread))
         })
         raise Errno.new("pthread_key_create") if ret != 0
       })
-      
       LibC.pthread_setspecific(@@current_thread_key, self.as(Void*))
 
       begin
@@ -99,4 +98,3 @@ alias AAThread = AsyncAwait::Thread
 def async_spawn(&block)
   AAThread.new &block
 end
-

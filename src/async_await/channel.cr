@@ -12,7 +12,7 @@ module AsyncAwait
       # min(the number of send task - recieve task, @capacity)
       @status = 0
 
-      # store send task to send_wait if queue is full 
+      # store send task to send_wait if queue is full
       @send_wait = Deque(Tuple(TaskCompletionSource(T), TaskCompletionSource(Nil))).new
 
       # true if channel closed
@@ -94,7 +94,7 @@ module AsyncAwait
       @mutex.synchronize do |mtx|
         loop do
           if tuple = @send_wait.shift?
-            #make sure send task is incomplete
+            # make sure send task is incomplete
             next unless tuple[1].try_set_value? nil
 
             @queue.push tuple[0]
