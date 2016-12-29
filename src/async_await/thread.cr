@@ -19,7 +19,7 @@ module AsyncAwait
       @@threads << self
 
       ret = LibGC.pthread_create(out th, nil, ->(dat : Void*) {
-        (dat.as(Thread)).start
+        (dat.as(typeof(self))).start
       }, self.as(Void*))
       @th = th
 
@@ -52,14 +52,14 @@ module AsyncAwait
 
     LibC.pthread_once(pointerof(@@key_once), ->{
       ret = LibC.pthread_key_create(pointerof(@@current_thread_key), ->(data : Void*) {
-        @@threads.delete(data.as(Thread))
+        @@threads.delete(data.as(self))
       })
       raise Errno.new("pthread_key_create") if ret != 0
     })
     LibC.pthread_setspecific(@@current_thread_key, new.as(Void*))
 
     def self.current
-      LibC.pthread_getspecific(@@current_thread_key).as(Thread)
+      LibC.pthread_getspecific(@@current_thread_key).as(self)
     end
 
     def self.threads
@@ -69,7 +69,7 @@ module AsyncAwait
     protected def start
       LibC.pthread_once(pointerof(@@key_once), ->{
         ret = LibC.pthread_key_create(pointerof(@@current_thread_key), ->(data : Void*) {
-          @@threads.delete(data.as(Thread))
+          @@threads.delete(data.as(typeof(self)))
         })
         raise Errno.new("pthread_key_create") if ret != 0
       })

@@ -1,4 +1,5 @@
 require "./task"
+require "./thread"
 
 module AsyncAwait
   private class AsyncCall
@@ -11,7 +12,7 @@ module AsyncAwait
     property sp : Void* = Pointer(Void).null # the bottom address of async call
     property fp : Void* = Pointer(Void).null # the top address of async call
     getter task : TaskInterface              # the task of current async call
-    property awaitee : Awaitable?            # the task which current async call wait for
+    property awaitee : (-> Status)?          # the task which current async call wait for
 
 
     def initialize(@task)
@@ -53,6 +54,10 @@ module AsyncAwait
     task.proc = ->{
       begin
         async_call.push
+        if async_call.awaitee.try &.call.incomplete?
+          AAThread.current.channel.send task.proc
+          return
+        end
         fp = uninitialized Void*
         {% if flag?(:x86_64) %}
           asm("movq \%rsp, ($0)":: "r"(pointerof(fp))::"volatile")
@@ -62,7 +67,7 @@ module AsyncAwait
         async_call.fp = fp
         task.value = block.call
         if async_call.awaitee
-          Thread.current.channel.send task.proc
+          AAThread.current.channel.send task.proc
         else
           task.status = Status::COMPLETED
         end
