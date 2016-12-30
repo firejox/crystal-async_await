@@ -112,4 +112,22 @@ describe AAChannel do
     AAChannel.send_first_with_csp(2, ch1, ch2)
     ch2.receive_with_csp.should eq 2
   end
+
+  it "works with select" do
+    ch1 = AAChannel(Int32).new
+    ch2 = AAChannel(Int32).new
+    spawn { ch1.send_with_csp 123 }
+    status = 0
+    AAChannel.select_with_csp do |x|
+      x.add_receive_action ch1 do |val|
+        val.should eq(123)
+        status = 1
+      end
+
+      x.add_receive_action ch2 do |val|
+        status = 2
+      end
+    end
+    status.should eq(1)
+  end
 end

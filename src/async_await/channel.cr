@@ -10,13 +10,13 @@ module AsyncAwait
     def initialize(@capacity = 0)
       # queue store availiable data if status > 0, otherwise
       #  it store incomplete task need to be set data
-      @queue = Deque(TaskCompletionSource(T)).new
+      @queue = Deque(TaskCompletionSource(T) | SelectCompletionSource(T)).new
 
       # min(the number of send task - recieve task, @capacity)
       @status = 0
 
       # store send task to send_wait if queue is full
-      @send_wait = Deque(Tuple(T, TaskCompletionSource(T))).new
+      @send_wait = Deque(Tuple(T, TaskCompletionSource(T) | SelectCompletionSource(T))).new
 
       # true if channel closed
       @closed = false
@@ -30,7 +30,7 @@ module AsyncAwait
     end
 
     def send?(value : T)
-      send_impl(value) { break nil } || Task(Nil).new nil
+      send_impl(value) { break nil }
     end
 
     protected def send_impl(value : T)
@@ -60,15 +60,21 @@ module AsyncAwait
       end
     end
 
-    def send(value : T, wait_tcs : TaskCompletionSource(T))
-      send_impl(value, wait_tcs) { raise ClosedError.new }
+    def send(value : T, wait_tcs)
+      send_impl(value, wait_tcs) do
+        wait_tcs.try_set_exception? ClosedError.new
+        raise ClosedError.new
+      end
     end
 
-    def send?(value : T, wait_tcs : TaskCompletionSource(T))
-      send_impl(value, wait_tcs) { break nil } || Task(Nil).new nil
+    def send?(value : T, wait_tcs)
+      send_impl(value, wait_tcs) do
+        wait_tcs.try_set_exception? ClosedError.new
+        break nil
+      end
     end
 
-    protected def send_impl(value : T, wait_tcs : TaskCompletionSource(T)) : Nil
+    protected def send_impl(value : T, wait_tcs) : Nil
       @mutex.synchronize do |mtx|
         yield if @closed
         loop do
@@ -109,7 +115,7 @@ module AsyncAwait
     end
 
     def receive?
-      receive_impl { break nil } || Task(Nil).new nil
+      receive_impl { break nil }
     end
 
     protected def receive_impl
@@ -134,15 +140,21 @@ module AsyncAwait
       end
     end
 
-    def receive(tcs : TaskCompletionSource(T))
-      receive_impl(tcs) { raise ClosedError.new }
+    def receive(tcs)
+      receive_impl(tcs) do
+        tcs.try_set_exception? ClosedError.new
+        raise ClosedError.new
+      end
     end
 
-    def receive?(tcs : TaskCompletionSource(T))
-      receive_impl(tcs) { break nil } || Task(Nil).new nil
+    def receive?(tcs)
+      receive_impl(tcs) do
+        tcs.try_set_exception? ClosedError.new
+        break nil
+      end
     end
 
-    protected def receive_impl(tcs : TaskCompletionSource(T)) : Nil
+    protected def receive_impl(tcs) : Nil
       @mutex.synchronize do |mtx|
         loop do
           if tuple = @send_wait.first?
@@ -184,7 +196,7 @@ module AsyncAwait
     end
 
     def send_with_csp?(value : T)
-      send?(value).value_with_csp
+      send?(value).try &.value_with_csp
     end
 
     def receive_with_csp : T
@@ -192,7 +204,7 @@ module AsyncAwait
     end
 
     def receive_with_csp? : T?
-      receive?.value_with_csp
+      receive?.try &.value_with_csp
     end
 
     def close : Nil
@@ -280,12 +292,18 @@ module AsyncAwait
       end.value_with_csp
     end
 
-    private class SelectCompletionSource(T) < TaskCompletionSource(T)
+    private class SelectCompletionSource(T)
       @proc : ->
+      getter task = Task(T).new
 
       def initialize(@tcs : TaskCompletionSource(->), &block : T ->)
-        super()
         @proc = ->{ block.call(@task.value) }
+      end
+
+      def value=(value : T) : Nil
+        unless try_set_value? value
+          raise TaskCompletionSource::InvalidOperation.new
+        end
       end
 
       def try_set_value?(value : T)
@@ -295,6 +313,12 @@ module AsyncAwait
           true
         else
           false
+        end
+      end
+
+      def exception=(exception : Exception) : Nil
+        unless try_set_exception? exception
+          raise TaskCompletionSource::InvalidOperation.new
         end
       end
 
