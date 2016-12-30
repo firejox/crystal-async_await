@@ -19,7 +19,7 @@ module AsyncAwait
     getter task = Task(T).new
     @status = Atomic(Int32).new Status::INCOMPLETE
 
-    def value=(value : T)
+    def value=(value : T) : Nil
       unless try_set_value? value
         raise InvalidOperation.new
       end
@@ -37,7 +37,7 @@ module AsyncAwait
       end
     end
 
-    def exception=(exception : Exception)
+    def exception=(exception : Exception) : Nil
       unless try_set_exception? exception
         raise InvalidOperation.new
       end
@@ -65,13 +65,13 @@ module AsyncAwait
       end
     end
 
-    protected def reset
+    protected def reset : Nil
       unless @status.compare_and_set(Status::MAYCOMPLETE, Status::INCOMPLETE)[1]
         raise InvalidOperation.new
       end
     end
 
-    protected def complete_set_value(value : T)
+    protected def complete_set_value(value : T) : Nil
       unless @status.compare_and_set(Status::MAYCOMPLETE, Status::COMPLETED)[1]
         raise InvalidOperation.new
       end
@@ -79,7 +79,7 @@ module AsyncAwait
       @task.status = AAStatus::COMPLETED
     end
 
-    protected def complete_set_exception(exception : Exception)
+    protected def complete_set_exception(exception : Exception) : Nil
       unless @status.compare_and_set(Status::MAYCOMPLETE, Status::FAULTED)[1]
         raise InvalidOperation.new
       end

@@ -20,7 +20,7 @@ end
 
 describe AsyncAwait do
   it "async/await work" do
-    task = uninitialized Task(Nil)
+    task = uninitialized Task(Int32?)
     a = async_spawn {
       task = foo
     }
