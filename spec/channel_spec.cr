@@ -1,5 +1,14 @@
 require "./spec_helper"
 
+private class AATest
+  getter buffered_ch = AAChannel(Int32).new 32
+  getter unbuffered_ch = AAChannel(Int32).new
+
+  async def async_await_pings
+    await @unbuffered_ch.send await @unbuffered_ch.receive
+  end
+end
+
 describe AAChannel do
   it "send returns task" do
     ch = AAChannel(Int32).new(1)

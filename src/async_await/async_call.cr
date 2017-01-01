@@ -12,7 +12,7 @@ module AsyncAwait
     property sp : Void* = Pointer(Void).null # the bottom address of async call
     property fp : Void* = Pointer(Void).null # the top address of async call
     getter task : TaskInterface              # the task of current async call
-    property awaitee : (-> Status)?          # the task which current async call wait for
+    property awaitee : (-> Status)?          # return the status of which task current async call wait for
 
 
     def initialize(@task)
@@ -35,7 +35,7 @@ module AsyncAwait
 
     @[NoInline]
     def dump_stack
-      @local_vars ||= GC.malloc_atomic(@fp.address - @sp.address)
+      @local_vars ||= GC.malloc(@fp.address - @sp.address)
       @local_vars.try &.copy_from(@sp, @fp.address - @sp.address)
     end
 
@@ -48,24 +48,28 @@ module AsyncAwait
     AsyncCall.current
   end
 
+  # A waiting time to ease the cost of GC
+  private ELAPSED_TIME = Time::Span.new(10000)
+
   def self.async_call_and_task_builder(block : -> R) forall R
     task = Task(R).new
     async_call = AsyncCall.new task
     task.proc = ->{
       begin
         async_call.push
-        if async_call.awaitee.try &.call.incomplete?
-          AAThread.current.channel.send task.proc
-          return
+        start_time = Time.now
+        until ELAPSED_TIME.ago >= start_time
+          next if async_call.awaitee.try &.call.incomplete?
+          fp = uninitialized Void*
+          {% if flag?(:x86_64) %}
+              asm("movq \%rsp, $0": "=r"(fp)::"volatile")
+          {% else %}
+            {{ raise "Unsupported platform, only x86_64 is supported" }}
+          {% end %}
+          async_call.fp = fp
+          task.value = block.call
+          break
         end
-        fp = uninitialized Void*
-        {% if flag?(:x86_64) %}
-          asm("movq \%rsp, ($0)":: "r"(pointerof(fp))::"volatile")
-        {% else %}
-          {{ raise "Unsupported platform, only x86_64 is supported" }}
-        {% end %}
-        async_call.fp = fp
-        task.value = block.call
         if async_call.awaitee
           AAThread.current.channel.send task.proc
         else

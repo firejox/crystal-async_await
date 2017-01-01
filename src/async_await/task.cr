@@ -1,4 +1,5 @@
 require "fiber"
+require "atomic"
 require "./awaitable"
 
 module AsyncAwait
@@ -10,11 +11,11 @@ module AsyncAwait
     abstract def value_with_csp
 
     def wait
-      wait { }
+      wait { next }
     end
 
     def wait
-      while status == Status::INCOMPLETE
+      while status.incomplete?
         yield
       end
     end
@@ -115,7 +116,6 @@ module AsyncAwait
       TimedTask.new time
     end
 
-    # BUG : unknown why await could lead infinity wait
     private class TimedTask
       include TaskInterface
       @status = Status::INCOMPLETE

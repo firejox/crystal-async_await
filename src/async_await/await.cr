@@ -2,7 +2,7 @@ macro await(call)
   {% if call.is_a?(Call) %}
     {{call}}.try do |%awaitee|
       AsyncAwait.current_call.try do |%current|
-      %current.awaitee = ->%awaitee.status
+        %current.awaitee = ->%awaitee.status
         %ip = Pointer(Void).null
 
         # get proper instruction address for reentrant

@@ -25,9 +25,9 @@ macro async(func)
         AsyncAwait.current_call.try do |%current|
           %sp = uninitialized Void*
 
-            # get the bottom stack address
-            {% if flag?(:x86_64) %}
-              asm("movq \%rsp, ($0)":: "r"(pointerof(%sp))::"volatile")
+          # get the bottom stack address
+          {% if flag?(:x86_64) %}
+            asm("movq \%rsp, ($0)":: "r"(pointerof(%sp))::"volatile")
           {% end %}
 
           %current.sp = %sp

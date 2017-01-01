@@ -24,7 +24,6 @@ module AsyncAwait
       @th = th
 
       if ret != 0
-        @@threads.delete(self)
         raise Errno.new("pthread_create")
       end
     end
@@ -67,24 +66,23 @@ module AsyncAwait
     end
 
     protected def start
-      LibC.pthread_once(pointerof(@@key_once), ->{
-        ret = LibC.pthread_key_create(pointerof(@@current_thread_key), ->(data : Void*) {
-          @@threads.delete(data.as(typeof(self)))
-        })
-        raise Errno.new("pthread_key_create") if ret != 0
-      })
-      LibC.pthread_setspecific(@@current_thread_key, self.as(Void*))
-
       begin
+        LibC.pthread_once(pointerof(@@key_once), ->{
+          ret = LibC.pthread_key_create(pointerof(@@current_thread_key), ->(data : Void*) {
+            @@threads.delete(data.as(typeof(self)))
+          })
+          raise Errno.new("pthread_key_create") if ret != 0
+        })
+        LibC.pthread_setspecific(@@current_thread_key, self.as(Void*))
         @func.call
-        while task = @channel.receive
-          break if task.status != Status::COMPLETED
-          task.value.call
+        while (task = @channel.receive?).try &.status.completed?
+          task.try &.value.call
         end
         @channel.close
-        while task.status == Status::COMPLETED
-          task.value.call
-          task = @channel.receive
+        task ||= @channel.receive?
+        while task.try &.status.completed?
+          task.try &.value.call
+          task = @channel.receive?
         end
       rescue ex
         @exception = ex
