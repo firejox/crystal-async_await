@@ -1,5 +1,6 @@
 require "./task"
 require "./thread"
+require "./intrinsics"
 
 module AsyncAwait
   private class AsyncCall
@@ -39,6 +40,17 @@ module AsyncAwait
       @local_vars.try &.copy_from(@sp, @fp.address - @sp.address)
     end
 
+    @[NoInline]
+    def set_current_ip : Nil
+      @current_ip = Intrinsics.returnaddress(0)
+    end
+
+    @[NoInline]
+    def clean
+      @awaitee = nil
+      @current_ip = nil
+    end
+
     def self.current
       @@current
     end
@@ -63,6 +75,8 @@ module AsyncAwait
           fp = uninitialized Void*
           {% if flag?(:x86_64) %}
               asm("movq \%rsp, $0": "=r"(fp)::"volatile")
+          {% elsif flags?(:i686) %}
+              asm("movl \%esp, $0": "=r"(fp)::"volatile")
           {% else %}
             {{ raise "Unsupported platform, only x86_64 is supported" }}
           {% end %}

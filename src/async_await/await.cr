@@ -3,26 +3,13 @@ macro await(call)
     {{call}}.try do |%awaitee|
       AsyncAwait.current_call.try do |%current|
         %current.awaitee = ->%awaitee.status
-        %ip = Pointer(Void).null
-
-        # get proper instruction address for reentrant
-        {% if flag?(:x86_64) %}
-          asm("1: callq 2f
-                  jmp   1b
-               2: popq  $0
-              ": "=r"(%ip)::"volatile")
-        {% else %}
-          {{ raise "Unsupported platform, only x86_64 is supported" }}
-        {% end %}
-        %current.current_ip = %ip
+        %current.set_current_ip
 
         if %awaitee.status == AAStatus::INCOMPLETE
           %current.dump_stack
           return nil
         end
-
-        %current.awaitee = nil
-        %current.current_ip = nil
+        AsyncAwait.current_call.try &.clean
       end
       %awaitee.value.itself
     end

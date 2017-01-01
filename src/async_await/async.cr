@@ -28,6 +28,8 @@ macro async(func)
           # get the bottom stack address
           {% if flag?(:x86_64) %}
             asm("movq \%rsp, ($0)":: "r"(pointerof(%sp))::"volatile")
+          {% elsif flags?(:i686) %}
+            asm("movl \%esp, ($0)":: "r"(pointerof(%sp))::"volatile")
           {% end %}
 
           %current.sp = %sp
@@ -35,6 +37,8 @@ macro async(func)
 
           AsyncAwait.current_call.try &.current_ip.try do |%ip|
           {% if flag?(:x86_64) %}
+            asm("jmp *$0"::"r"(%ip)::"volatile")
+          {% elsif flags?(:i686) %}
             asm("jmp *$0"::"r"(%ip)::"volatile")
           {% end %}
           end
