@@ -50,7 +50,7 @@ module AsyncAwait
       when Status::FAULTED
         raise @exception.not_nil!
       else
-        raise "Invalid Task Status"
+        raise InvalidStatus.new
       end
     end
 
@@ -67,7 +67,7 @@ module AsyncAwait
       when Status::FAULTED
         raise @exception.not_nil!
       else
-        raise "Invalid Task Status"
+        raise InvalidStatus.new
       end
     end
 
@@ -89,65 +89,10 @@ module AsyncAwait
       task.status = Status::FAULTED
       task
     end
-
-    def self.yield : Awaitable
-      YieldAwaitable.new
-    end
-
-    class YieldAwaitable
-      include Awaitable
-
-      @status = Status::INCOMPLETE
-
-      def value : Nil
-      end
-
-      def exception : Nil
-      end
-
-      @[NoInline]
-      def status
-        tmp, @status = @status, Status::COMPLETED
-        tmp
-      end
-    end
-
-    def self.delay(time : Time::Span) : TaskInterface
-      TimedTask.new time
-    end
-
-    private class TimedTask
-      include TaskInterface
-      @status = Status::INCOMPLETE
-      @cur_time = Time.now
-
-      def initialize(@delay : Time::Span)
-      end
-
-      def value : Nil
-        wait
-      end
-
-      def value_with_csp : Nil
-        wait_with_csp
-      end
-
-      def exception : Nil
-      end
-
-      def proc : Nil
-      end
-
-      @[NoInline]
-      def status
-        if @delay.ticks != -1 && @delay.ago >= @cur_time
-          @status = Status::COMPLETED
-        end
-        @status
-      end
-    end
   end
 end
 
 alias TaskInterface = AsyncAwait::TaskInterface
 alias Task = AsyncAwait::Task
+
+require "./task/*"

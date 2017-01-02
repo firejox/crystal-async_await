@@ -4,6 +4,12 @@ module AsyncAwait
     COMPLETED
     FAULTED
   end
+  
+  class InvalidStatus < ::Exception
+    def initialize(msg = "Status is Invalid")
+      super(msg)
+    end
+  end
 
   module Awaitable
     abstract def value
