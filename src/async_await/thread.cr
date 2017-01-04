@@ -1,6 +1,14 @@
 require "c/pthread"
+require "event"
+require "concurrent/scheduler"
 require "./lib_c"
 require "./channel"
+
+class Scheduler
+  def self.event_base
+    @@eb
+  end
+end
 
 module AsyncAwait
   class Thread
@@ -12,10 +20,12 @@ module AsyncAwait
     @th : LibC::PthreadT?
     @exception : Exception?
     @detached = false
+    @eb : Event::Base?
 
     getter channel = Channel(->).new
 
     def initialize(&@func : ->)
+      @eb = ::Event::Base.new
       @@threads << self
 
       ret = LibGC.pthread_create(out th, nil, ->(dat : Void*) {
@@ -34,6 +44,13 @@ module AsyncAwait
       @th = LibC.pthread_self
     end
 
+    def event_base
+      @eb
+    end
+
+    protected def event_base=(@eb : Event::Base)
+    end
+
     def finalize
       LibGC.pthread_detach(@th.not_nil!) unless @detached
     end
@@ -49,13 +66,71 @@ module AsyncAwait
       end
     end
 
+    protected def add_read_event(fd)
+      ev_flags = LibEvent2::EventFlags::Read
+
+      if !(timeout = fd.read_timeout) || fd.edge_triggerable
+        ev_flags |= LibEvent2::EventFlags::ET if fd.edge_triggerable
+
+        @eb.try &.once_event fd.fd, ev_flags, fd.as(Void*) do |s, flags, data|
+          fd_io = data.as(AsyncAwait::FileDescriptor)
+
+          if flags.includes?(LibEvent2::EventFlags::Read)
+            fd_io.resume_read false
+          elsif flags.includes?(LibEvent2::EventFlags::Timeout)
+            fd_io.resume_read true
+          end
+        end
+      else
+        @eb.try &.once_event fd.fd, ev_flags, fd.as(Void*), timeout do |s, flags, data|
+          fd_io = data.as(AsyncAwait::FileDescriptor)
+
+          if flags.includes?(LibEvent2::EventFlags::Read)
+            fd_io.resume_read false
+          elsif flags.includes?(LibEvent2::EventFlags::Timeout)
+            fd_io.resume_read true
+          end
+        end
+      end
+    end
+
+    protected def add_write_event(fd)
+      ev_flags = LibEvent2::EventFlags::Write
+
+      if !(timeout = fd.write_timeout) || fd.edge_triggerable
+        ev_flags |= LibEvent2::EventFlags::ET if fd.edge_triggerable
+
+        @eb.try &.once_event fd.fd, ev_flags, fd.as(Void*) do |s, flags, data|
+          fd_io = data.as(AsyncAwait::FileDescriptor)
+          if flags.includes?(LibEvent2::EventFlags::Write)
+            fd_io.resume_write false
+          elsif flags.includes?(LibEvent2::EventFlags::Timeout)
+            fd_io.resume_write true
+          end
+        end
+      else
+        @eb.try &.once_event fd.fd, ev_flags, fd.as(Void*), timeout do |s, flags, data|
+          fd_io = data.as(AsyncAwait::FileDescriptor)
+
+          if flags.includes?(LibEvent2::EventFlags::Write)
+            fd_io.resume_write false
+          elsif flags.includes?(LibEvent2::EventFlags::Timeout)
+            fd_io.resume_write true
+          end
+        end
+      end
+    end
+
+    @@main = new
+    @@main.event_base = ::Scheduler.event_base
+
     LibC.pthread_once(pointerof(@@key_once), ->{
       ret = LibC.pthread_key_create(pointerof(@@current_thread_key), ->(data : Void*) {
         @@threads.delete(data.as(self))
       })
       raise Errno.new("pthread_key_create") if ret != 0
     })
-    LibC.pthread_setspecific(@@current_thread_key, new.as(Void*))
+    LibC.pthread_setspecific(@@current_thread_key, @@main.as(Void*))
 
     def self.current
       LibC.pthread_getspecific(@@current_thread_key).as(self)
@@ -63,6 +138,10 @@ module AsyncAwait
 
     def self.threads
       @@threads
+    end
+
+    def is_main?
+      self.class.current == @@main
     end
 
     protected def start
@@ -74,11 +153,17 @@ module AsyncAwait
           raise Errno.new("pthread_key_create") if ret != 0
         })
         LibC.pthread_setspecific(@@current_thread_key, self.as(Void*))
+
         @func.call
+
+        # run task
         while (task = @channel.receive?).try &.status.completed?
           task.try &.value.call
         end
+
         @channel.close
+
+        # clean last task
         task ||= @channel.receive?
         while task.try &.status.completed?
           task.try &.value.call
