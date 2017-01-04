@@ -332,13 +332,7 @@ module AsyncAwait
         end
       end
 
-      protected def try_complete?
-        @tcs.try_complete?
-      end
-
-      protected def reset : Nil
-        @tcs.reset
-      end
+      protected delegate try_complete?, reset, to: @tcs
 
       protected def complete_set_value(value : T) : Nil
         @tcs.complete_set_value @proc
