@@ -4,7 +4,8 @@ module AsyncAwait
     COMPLETED
     FAULTED
   end
-  
+
+  # Raised if the status of `Task` is invalid.
   class InvalidStatus < ::Exception
     def initialize(msg = "Status is Invalid")
       super(msg)

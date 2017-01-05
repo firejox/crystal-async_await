@@ -4,12 +4,22 @@ require "./task_completion_source"
 
 module AsyncAwait
   class Channel(T)
+    # Raised when send value to closed channel or receive value from empty closed channel
     class ClosedError < ::Channel::ClosedError
     end
 
+    # Creates a new empty Channel with `capacity`
+    #
+    # The `capacity` is the size of buffer. If `capacity` is zero, then the channel is unbuffered;
+    # Otherwise it is buffered channel.
+    #
+    # ```
+    # unbuffered_channel = AAChannel(Int32).new
+    # buffered_channel = AAChannel(Int32).new 5
+    # ```
     def initialize(@capacity = 0)
-      # queue store availiable data if status > 0, otherwise
-      #  it store incomplete task need to be set data
+      # queue store availiable data if status > 0, otherwise it
+      # store incomplete task need to be set data
       @queue = Deque(TaskCompletionSource(T) | SelectCompletionSource(T)).new
 
       # min(the number of send task - recieve task, @capacity)
@@ -25,10 +35,19 @@ module AsyncAwait
       @mutex = ::Thread::Mutex.new
     end
 
+    # Send value into channel. It returns `Task` for waiting send operation completed.
+    # Raise `ClosedError` if closed.
+    #
+    # ```
+    # channel = AAChannel(Int32).new 1
+    # await channel.send 2 # => 2
+    # ```
     def send(value : T)
       send_impl(value) { raise ClosedError.new }
     end
 
+    # Send value into channel. It returns `Task` for waiting send operation completed.
+    # Returns `nil` if closed.
     def send?(value : T)
       send_impl(value) { break nil }
     end
@@ -60,6 +79,15 @@ module AsyncAwait
       end
     end
 
+    # Send value into channel with given `TaskCompletionSource`. It allow to cancel send
+    # by `TaskCompletionSource`. Raise `ClosedError` if closed.
+    #
+    # ```
+    # ch = AAChannel(Int32).new 1
+    # tcs = TaskCompletionSource(Int32).new
+    # ch.send(1, tcs)
+    # await tcs.task # => 1
+    # ```
     def send(value : T, wait_tcs)
       send_impl(value, wait_tcs) do
         wait_tcs.try_set_exception? ClosedError.new
@@ -67,6 +95,8 @@ module AsyncAwait
       end
     end
 
+    # Send value into channel with given `TaskCompletionSource`. It allow to cancel send
+    # by `TaskCompletionSource`. Returns `nil` if closed.
     def send?(value : T, wait_tcs)
       send_impl(value, wait_tcs) do
         wait_tcs.try_set_exception? ClosedError.new
@@ -110,10 +140,20 @@ module AsyncAwait
       end
     end
 
+    # receive value from channel. It returns `Task` for waiting receive operation completed.
+    # Raise `ClosedError` if closed.
+    #
+    # ```
+    # ch = AAChannel(Int32).new
+    # ch.send 1
+    # await ch.receive # => 1
+    # ```
     def receive
       receive_impl { raise ClosedError.new }
     end
 
+    # Recieve value from channel. It returns `Task` for waiting receive operation completed.
+    # Returns `nil` if closed.
     def receive?
       receive_impl { break nil }
     end
@@ -140,6 +180,16 @@ module AsyncAwait
       end
     end
 
+    # Receive value from channel with `TaskCompletionSource`. It allow to cancel receive
+    # by `TaskCompletionSource`. Raise `ClosedError` if closed.
+    #
+    # ```
+    # ch = AAChannel(Int32).new
+    # tcs = TaskCompletionSource(Int32).new
+    # ch.send 1
+    # ch.receive(tcs)
+    # await tcs.task # => 1
+    # ```
     def receive(tcs)
       receive_impl(tcs) do
         tcs.try_set_exception? ClosedError.new
@@ -147,6 +197,8 @@ module AsyncAwait
       end
     end
 
+    # Receive value from channel with `TaskCompletionSource`. It allow to cancel receive
+    # by `TaskCompletionSource`. Returns `nil` if closed.
     def receive?(tcs)
       receive_impl(tcs) do
         tcs.try_set_exception? ClosedError.new
@@ -191,22 +243,47 @@ module AsyncAwait
       end
     end
 
+    # Send value into channel and wait for completed by `TaskInterface#value_with_csp`.
+    # Raise `ClosedError` if closed.
+    #
+    # ```
+    # ch = AAChannel(Int32).new 1
+    # ch.send_with_csp 2
+    # ```
     def send_with_csp(value : T)
       send(value).value_with_csp
     end
 
+    # Send value into channel and wait for completed by `TaskInterface#value_with_csp`.
+    # Returns `nil` if closed.
     def send_with_csp?(value : T)
       send?(value).try &.value_with_csp
     end
 
+    # Receive value from channel and wait for completed by `TaskInterface#value_with_csp`.
+    # Raise `ClosedError` if closed.
+    #
+    # ```
+    # ch = AAChannel(Int32).new
+    # ch.send 1
+    # ch.receive_with_csp # => 1
+    # ```
     def receive_with_csp : T
       receive.value_with_csp
     end
 
+    # Receive value from channel and wait for completed by `TaskInterface#value_with_csp`.
+    # Returns `nil` if closed.
     def receive_with_csp? : T?
       receive?.try &.value_with_csp
     end
 
+    # Close channel. It is able to receive value if there are remaining send values.
+    #
+    # ```
+    # ch = AAChannel(Int32).new
+    # ch.close
+    # ```
     def close : Nil
       return if @closed
       @mutex.synchronize do |mtx|
@@ -221,10 +298,26 @@ module AsyncAwait
       end
     end
 
+    # Returns `true` if channel closed, otherwise `false`.
+    #
+    # ```
+    # ch = AAChannel(Int32).new
+    # ch.closed? # => false
+    # ch.close
+    # ch.closed? # => true
+    # ```
     def closed?
       @closed
     end
 
+    # Returns `true` if the buffer of channel is full, otherwise `false`.
+    #
+    # ```
+    # ch = AAChannel(Int32).new 1
+    # ch.full? # => false
+    # ch.send 1
+    # ch.full? # => true
+    # ```
     def full?
       if @capacity > 0
         @status >= @capacity
@@ -233,6 +326,14 @@ module AsyncAwait
       end
     end
 
+    # Returns `true` if the buffer of channel is empty, otherwise `false`.
+    #
+    # ```
+    # ch = AAChannel(Int32).new 1
+    # ch.empty? # => true
+    # ch.send 1
+    # ch.empty? # => false
+    # ```
     def empty?
       if @capacity > 0
         @status <= 0
@@ -241,51 +342,134 @@ module AsyncAwait
       end
     end
 
+    # Receive first value from given channels. It returns `Task` for waiting receive operation
+    # completed.
+    #
+    # ```
+    # ch1 = AAChannel(Int32).new
+    # ch2 = AAChannel(Int32).new
+    # ch1.send 1
+    # await AAChannel.receive_first(ch1, ch2) # => 1
+    # ```
     def self.receive_first(*channels : Channel(T)) forall T
       tcs = TaskCompletionSource(T).new
-      channels.each &.receive(tcs)
+      channels.each &.receive?(tcs)
       tcs.task
     end
 
+    # Receive first value from given channels. It returns `Task` for waiting receive operation
+    # completed.
     def self.receive_first(channels : Array(Channel(T))) forall T
       tcs = TaskCompletionSource(T).new
-      channels.each &.receive(tcs)
+      channels.each &.receive?(tcs)
       tcs.task
     end
 
+    # Receive first value from given channels and wait for completed
+    # by `TaskInterface#value_with_csp`
+    #
+    # ```
+    # ch1 = AAChannel(Int32).new
+    # ch2 = AAChannel(Int32).new
+    # ch1.send 1
+    # AAchannel.receive_first_with_csp(ch1, ch2) # => 1
+    # ```
     def self.receive_first_with_csp(*channels)
       receive_first(*channels).value_with_csp
     end
 
+    # Receive first value from given channels and wait for completed
+    # by `TaskInterface#value_with_csp`
     def self.receive_first_with_csp(channels : Array)
       receive_first(channels).value_with_csp
     end
 
+    # Send first value into given channels. It returns `Task` for waiting send operation
+    # completed.
+    #
+    # ```
+    # ch1 = AAChannel(Int32).new 1
+    # ch2 = AAChannel(Int32).new 1
+    # ch1.send 1
+    # await AAChannel.send_first(2, ch1, ch2)
+    # await ch2.receive # => 2
+    # ```
     def self.send_first(value : T, *channels : Channel(T)) forall T
       wait_tcs = TaskCompletionSource(T).new
-      channels.each &.send(value, wait_tcs)
+      channels.each &.send?(value, wait_tcs)
       wait_tcs.task
     end
 
+    # Send first value into given channels. It returns `Task` for waiting send operation
+    # completed.
     def self.send_first(value : T, channels : Array(Channel(T))) forall T
       wait_tcs = TaskCompletionSource(T).new
-      channels.each &.send(value, wait_tcs)
+      channels.each &.send?(value, wait_tcs)
       wait_tcs.task
     end
 
+    # Send first value into given channels and wait for completed by `TaskInterface#value_with_csp`
+    #
+    # ```
+    # ch1 = AAChannel(Int32).new 1
+    # ch2 = AAChannel(Int32).new 1
+    # ch1.send 1
+    # AAChannel.send_first_with_csp(2, ch1, ch2)
+    # ch2.receive_with_csp # => 2
+    # ```
     def self.send_first_with_csp(value, *channels)
       send_first(value, *channels).value_with_csp
     end
 
+    # Send first value into given channels and wait for completed by `TaskInterface#value_with_csp`
     def self.send_first_with_csp(value, channels : Array)
       send_first(value, channels).value_with_csp
     end
 
+    # Select one of action. It returns `Task` for waiting select operation
+    # completed.
+    #
+    # ```
+    # ch1 = AAChannel(Int32).new
+    # ch2 = AAChannel(Int32).new
+    # ch1.send 123
+    # status = 0
+    # await AAChannel.select do |x|
+    #   x.add_receive_action ch1 do |val|
+    #     val # => 123
+    #     status = 1
+    #   end
+    #
+    #   x.add_receive_action ch2 do |val|
+    #     status = 2
+    #   end
+    # end
+    # status # => 1
+    # ```
     def self.select
       yield action = Selector.new
       action.task
     end
 
+    # Select one of action and wait for completed by `TaskInterface#value_with_csp`.
+    #
+    # ```
+    # ch1 = AAChannel(Int32).new
+    # ch2 = AAChannel(Int32).new
+    # ch1.send 123
+    # status = 0
+    # AAChannel.select_with_csp do |x|
+    #   x.add_receive_action ch1 do |val|
+    #     val # => 123
+    #     status = 1
+    #   end
+    #
+    #   x.add_receive_action ch2 do |val|
+    #     status = 2
+    #   end
+    # end
+    # status # => 1
+    # ```
     def self.select_with_csp
       self.select do |action|
         yield action
@@ -392,9 +576,6 @@ module AsyncAwait
 
         def exception
           @exception
-        end
-
-        def proc : Nil
         end
 
         def status

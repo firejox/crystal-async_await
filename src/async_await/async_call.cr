@@ -63,6 +63,7 @@ module AsyncAwait
   # A waiting time to ease the cost of GC
   private ELAPSED_TIME = Time::Span.new(10000)
 
+  # :nodoc:
   def self.async_call_and_task_builder(block : -> R) forall R
     task = Task(R).new
     async_call = AsyncCall.new task
