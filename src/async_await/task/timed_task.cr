@@ -25,9 +25,6 @@ private class TimedTask
   def exception : Nil
   end
 
-  def proc : Nil
-  end
-
   @[NoInline]
   def status
     if @delay.ticks != -1 && @delay.ago >= @cur_time

@@ -46,7 +46,7 @@ macro async(func)
 
         {{ func.body }}
       }
-      %task.proc.call
+      %task.start
       %task
     end
   {% else %}

@@ -3,23 +3,28 @@ require "atomic"
 require "./awaitable"
 
 module AsyncAwait
+  # The Interface of `Task`.
+  # It provide some method to work with `Fiber`.
   module TaskInterface
     include Awaitable
 
-    abstract def proc : Proc(Nil)?
-
+    # Returns value when `wait_with_csp` is completed.
+    # Raised exception if `status` is faulted.
     abstract def value_with_csp
 
+    # Busy wait for task is completed.
     def wait
       wait { next }
     end
 
+    # Yield block when task is incomplete.
     def wait
       while status.incomplete?
         yield
       end
     end
 
+    # Busy wait by `Fiber#yield`.
     def wait_with_csp
       wait { Fiber.yield }
     end
@@ -30,7 +35,7 @@ module AsyncAwait
     @value = uninitialized T
     @status : Status
     getter exception : Exception?
-    getter proc : ->
+    protected property proc : ->
 
     def initialize
       @proc = Proc(Void).new { }
@@ -52,6 +57,10 @@ module AsyncAwait
       else
         raise InvalidStatus.new
       end
+    end
+
+    def start
+      @proc.call
     end
 
     @[NoInline]
@@ -78,9 +87,6 @@ module AsyncAwait
     end
 
     protected def exception=(@exception : Exception)
-    end
-
-    protected def proc=(@proc)
     end
 
     def self.from_exception(exception : Exception)

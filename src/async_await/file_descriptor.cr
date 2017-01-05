@@ -141,9 +141,6 @@ module AsyncAwait
 
       abstract def do_work(fd : FileDescriptor, timeout : Bool)
 
-      def proc : Nil
-      end
-
       @[NoInline]
       def status
         @status
