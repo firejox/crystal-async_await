@@ -17,9 +17,24 @@ dependencies:
 ```crystal
 require "async_await"
 
-async def foo
-  await Task.delay(Time::Span.new(0, 0, 1))
+class Foo
+  getter ch = AAChannel(String).new
+
+  async def bar
+    await Task.delay(Time::Span.new(0, 0, 1))
+    await ch.receive  # => "Hello"
+    await ch.send "Crystal!"
+  end
 end
+
+foo = Foo.new
+
+async_spawn do
+  foo.bar
+end
+
+foo.ch.send_with_csp "Hello"
+foo.ch.receive_with_csp # => "Crystal!"
 ```
 
 another way for concurrent
