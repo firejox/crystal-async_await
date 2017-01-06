@@ -36,4 +36,8 @@ describe AsyncAwait do
     a.ch.send_with_csp "Hello"
     a.ch.receive_with_csp.should eq("Crystal!")
   end
+
+  it "work in main thread" do
+    foo.value_with_csp.not_nil!.should be >= Time::Span.new(0, 0, 1)
+  end
 end

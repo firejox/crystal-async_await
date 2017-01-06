@@ -141,7 +141,17 @@ module AsyncAwait
     end
 
     def is_main?
-      self.class.current == @@main
+      self == @@main
+    end
+
+    def post(proc)
+      @channel.send proc
+      if is_main?
+        @eb.try &.once_event -1, LibEvent2::EventFlags::Timeout, @channel.as(Void*) do |s, flags, data|
+          ch = data.as(Channel(->))
+          ch.receive.value.call
+        end
+      end
     end
 
     protected def start
@@ -153,6 +163,7 @@ module AsyncAwait
           raise Errno.new("pthread_key_create") if ret != 0
         })
         LibC.pthread_setspecific(@@current_thread_key, self.as(Void*))
+        LibExt.setup_sigfault_handler
 
         @func.call
 

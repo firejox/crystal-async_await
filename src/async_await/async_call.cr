@@ -86,7 +86,7 @@ module AsyncAwait
           break
         end
         if async_call.awaitee
-          AAThread.current.channel.send task.proc
+          AAThread.current.post task.proc
         else
           task.status = Status::COMPLETED
         end
