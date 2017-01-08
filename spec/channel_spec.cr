@@ -4,8 +4,23 @@ private class AATest
   getter buffered_ch = AAChannel(Int32).new 32
   getter unbuffered_ch = AAChannel(Int32).new
 
+  getter ch = [AAChannel(Int32).new, AAChannel(Int32).new]
+  getter val = -1
+
   async def async_await_pings
     await @unbuffered_ch.send await @unbuffered_ch.receive
+  end
+
+  async def select_test
+    await(AAChannel.select do |x|
+      x.add_send_action(ch[0], 0) do |val|
+        @val = 0
+      end
+
+      x.add_receive_action(ch[1]) do |val|
+        @val = val
+      end
+    end)
   end
 end
 
@@ -138,5 +153,24 @@ describe AAChannel do
       end
     end
     status.should eq(1)
+  end
+
+  it "work with send and recieve action in select" do
+    test = AATest.new
+    a = async_spawn { test.select_test }
+    status = -2
+    AAChannel.select_with_csp do |x|
+      x.add_receive_action(test.ch[0]) do |val|
+        status = val
+      end
+
+      x.add_send_action(test.ch[1], 1) do |val|
+        status = 1
+      end
+    end
+
+    a.join
+
+    status.should eq(test.val)
   end
 end

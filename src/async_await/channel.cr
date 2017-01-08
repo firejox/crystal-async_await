@@ -33,6 +33,15 @@ module AsyncAwait
 
       # for synchronize
       @mutex = ::Thread::Mutex.new
+
+      # priority for execute select
+      @priority = 0_u64
+
+      # for priority synchronize, spin lock would be better
+      @priority_lock = ::Thread::Mutex.new
+
+      # the count of the thread hold priority
+      @priority_ref_count = 0
     end
 
     # Send value into channel. It returns `Task` for waiting send operation completed.
@@ -342,6 +351,20 @@ module AsyncAwait
       end
     end
 
+    protected def acquire_priority
+      @priority_lock.synchronize do |mtx|
+        @priority = Random.rand(UInt64::MAX) if @priority_ref_count == 0
+        @priority_ref_count += 1
+        return @priority
+      end
+    end
+
+    protected def release_priority
+      @priority_lock.synchronize do |mtx|
+        @priority_ref_count -= 1
+      end
+    end
+
     # Receive first value from given channels. It returns `Task` for waiting receive operation
     # completed.
     #
@@ -448,6 +471,7 @@ module AsyncAwait
     # ```
     def self.select
       yield action = Selector.new
+      action.run
       action.task
     end
 
@@ -533,15 +557,41 @@ module AsyncAwait
 
     private class Selector
       @tcs = TaskCompletionSource(->).new
+      @actions = [] of Tuple({UInt64, UInt64}, Proc(Nil))
+      @cleanup_actions = [] of Proc(Nil)
 
       def add_send_action(ch : Channel(T), value : T, &block : T ->) forall T
-        scs = SelectCompletionSource(T).new @tcs, &block
-        ch.send(value, scs)
+        tuple = { {ch.acquire_priority, ch.object_id}, ->{
+          scs = SelectCompletionSource(T).new @tcs, &block
+          ch.send(value, scs)
+          nil
+        } }
+        @actions << tuple
+        @cleanup_actions << ->{
+          ch.release_priority
+          nil
+        }
       end
 
       def add_receive_action(ch : Channel(T), &block : T ->) forall T
-        scs = SelectCompletionSource(T).new @tcs, &block
-        ch.receive scs
+        tuple = { {ch.acquire_priority, ch.object_id}, ->{
+          scs = SelectCompletionSource(T).new @tcs, &block
+          ch.receive scs
+          nil
+        } }
+        @actions << tuple
+        @cleanup_actions << ->{
+          ch.release_priority
+          nil
+        }
+      end
+
+      protected def run
+        @actions.group_by { |id, proc| id }
+                .map { |id, arr| arr[Random.rand(arr.size)] }
+                .sort_by! { |id, proc| id }
+                .each { |id, proc| proc.call }
+        @cleanup_actions.each &.call
       end
 
       protected def task
