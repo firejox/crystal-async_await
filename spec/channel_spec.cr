@@ -12,7 +12,7 @@ end
 describe AAChannel do
   it "send returns task" do
     ch = AAChannel(Int32).new(1)
-    ch.send(1).should be_a(TaskInterface)
+    ch.send(1).should be_a(Task(Int32))
   end
 
   it "send with TaskCompletionSource returns nil" do
@@ -38,7 +38,7 @@ describe AAChannel do
   it "receive returns task" do
     ch = AAChannel(Int32).new(1)
     ch.send(1)
-    ch.receive.should be_a(TaskInterface)
+    ch.receive.should be_a(Task(Int32))
   end
 
   it "receive with TaskCompletionSource returns nil" do

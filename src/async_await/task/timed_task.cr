@@ -1,13 +1,12 @@
 module AsyncAwait
-  class Task
-    def self.delay(time : Time::Span) : TaskInterface
+  abstract class Task
+    def self.delay(time : Time::Span)
       TimedTask.new time
     end
   end
 end
 
-private class TimedTask
-  include TaskInterface
+private class TimedTask < Task(Nil)
   @status = AAStatus::INCOMPLETE
   @cur_time = Time.now
 

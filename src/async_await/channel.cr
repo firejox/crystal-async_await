@@ -548,12 +548,11 @@ module AsyncAwait
         SelectedTask.new @tcs.task
       end
 
-      class SelectedTask
-        include TaskInterface
+      class SelectedTask < Task(Nil)
         @status = Status::INCOMPLETE
         @exception : Exception?
 
-        def initialize(@task : Task(->))
+        def initialize(@task : TaskImpl(->))
         end
 
         def value : Nil

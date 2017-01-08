@@ -34,7 +34,7 @@ describe Task do
 
   describe "delay" do
     it "creates Task object for await" do
-      Task.delay(Time::Span.new(0, 0, 1)).should be_a(TaskInterface)
+      Task.delay(Time::Span.new(0, 0, 1)).should be_a(Task(Nil))
     end
 
     it "would be completed after timeout" do

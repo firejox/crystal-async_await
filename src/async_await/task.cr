@@ -5,12 +5,24 @@ require "./awaitable"
 module AsyncAwait
   # The Interface of `Task`.
   # It provide some method to work with `Fiber`.
-  module TaskInterface
+  abstract class Task(T)
     include Awaitable
+
+    def self.new
+      TaskImpl(T).new
+    end
+
+    def self.new(value : T)
+      TaskImpl.new value
+    end
+
+    def self.from_exception(ex : Exception)
+      TaskImpl(T).from_exception ex
+    end
 
     # Returns value when `wait_with_csp` is completed.
     # Raised exception if `status` is faulted.
-    abstract def value_with_csp
+    abstract def value_with_csp : T
 
     # Busy wait for task is completed.
     def wait
@@ -30,8 +42,7 @@ module AsyncAwait
     end
   end
 
-  class Task(T)
-    include TaskInterface
+  private class TaskImpl(T) < Task(T)
     @value = uninitialized T
     @status : Status
     getter exception : Exception?
@@ -98,7 +109,6 @@ module AsyncAwait
   end
 end
 
-alias TaskInterface = AsyncAwait::TaskInterface
 alias Task = AsyncAwait::Task
 
 require "./task/*"

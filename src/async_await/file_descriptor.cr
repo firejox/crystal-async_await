@@ -107,8 +107,7 @@ module AsyncAwait
       task.value
     end
 
-    private abstract class IOTask
-      include TaskInterface
+    private abstract class IOTask < Task(Int32)
       @status = Status::INCOMPLETE
       getter exception : Exception?
 

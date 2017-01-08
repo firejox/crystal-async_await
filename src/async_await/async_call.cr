@@ -12,12 +12,7 @@ module AsyncAwait
     property local_vars : Void*? = nil       # current local variables dump
     property sp : Void* = Pointer(Void).null # the bottom address of async call
     property fp : Void* = Pointer(Void).null # the top address of async call
-    getter task : TaskInterface              # the task of current async call
     property awaitee : (-> Status)?          # return the status of which task current async call wait for
-
-
-    def initialize(@task)
-    end
 
     protected def push
       @prev = @@current
@@ -66,7 +61,7 @@ module AsyncAwait
   # :nodoc:
   def self.async_call_and_task_builder(block : -> R) forall R
     task = Task(R).new
-    async_call = AsyncCall.new task
+    async_call = AsyncCall.new
     task.proc = ->{
       begin
         async_call.push
