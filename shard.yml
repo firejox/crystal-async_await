@@ -7,6 +7,6 @@ authors:
 description: |
   async/await for Crystal
 
-crystal: 0.20.1
+crystal: 0.20.4
 
 license: MIT
