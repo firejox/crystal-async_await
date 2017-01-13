@@ -43,4 +43,43 @@ describe Task do
       a.status.should eq(AAStatus::COMPLETED)
     end
   end
+
+  describe "when_all" do
+    it "creates Task for await all task been final state" do
+      t1 = Task.delay(Time::Span.new(1000))
+      t2 = Task.new(nil)
+      a = Task.when_all(t1, t2)
+      a.wait
+      t1.status.should eq(AAStatus::COMPLETED)
+      t2.status.should eq(AAStatus::COMPLETED)
+      a.status.should eq(AAStatus::COMPLETED)
+    end
+
+    it "would be faulted if one of status faulted" do
+      t1 = Task.new(nil)
+      t2 = Task(Nil).from_exception(Exception.new)
+      a = Task.when_all(t1, t2)
+      a.wait
+      a.status.should eq(AAStatus::FAULTED)
+    end
+  end
+
+  describe "when_any" do
+    it "creates Task for await any task been final state" do
+      t1 = Task.delay(Time::Span.new(1000))
+      t2 = Task.new(nil)
+      a = Task.when_any(t1, t2)
+
+      t2.status.should eq(AAStatus::COMPLETED)
+      a.status.should eq(AAStatus::COMPLETED)
+    end
+
+    it "has value with first completed task" do
+      t1 = Task.delay(Time::Span.new(1000))
+      t2 = Task.new(nil)
+
+      a = Task.when_any(t1, t2)
+      a.value.should eq(t2)
+    end
+  end
 end
