@@ -1,4 +1,7 @@
-macro await(call)
+macro await(call, &block)
+  {% if call.is_a?(Call) && block %}
+    {% call = "#{call.id} #{block.id}".id %}
+  {% end %}
   {{call}}.try do |%awaitee|
     AsyncAwait.current_call.try do |%current|
       %current.awaitee = ->%awaitee.status

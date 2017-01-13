@@ -12,7 +12,7 @@ private class AATest
   end
 
   async def select_test
-    await(AAChannel.select do |x|
+    await AAChannel.select do |x|
       x.add_send_action(ch[0], 0) do |val|
         @val = 0
       end
@@ -20,7 +20,7 @@ private class AATest
       x.add_receive_action(ch[1]) do |val|
         @val = val
       end
-    end)
+    end
   end
 end
 
