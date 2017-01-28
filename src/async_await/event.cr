@@ -29,8 +29,25 @@ module Event
       end
     end
 
-    def run_once_nonblock
-      LibEvent2.event_base_loop(@base, LibEvent2::EventLoopFlags::Once | LibEvent2::EventLoopFlags::NonBlock)
+    def loop_continue
+      LibEvent2.event_base_loopcontinue(@base)
+    end
+
+    def loop_exit(timeout)
+      t = to_timeval(timeout.not_nil!)
+      unless LibEvent2.event_base_loopexit(@base, pointerof(t)) == 0
+        raise "Error set loop exit time"
+      end
+    end
+
+    def loop_exit
+      unless LibEvent2.event_base_loopexit(@base, nil) == 0
+        raise "Error set loop exit time"
+      end
+    end
+
+    def exit?
+      LibEvent2.event_base_got_exit(@base) == 1
     end
   end
 end

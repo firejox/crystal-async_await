@@ -2,12 +2,15 @@ require "./task"
 require "./channel"
 require "./task_completion_source"
 require "./thread"
+require "./async_io"
 
 module AsyncAwait
   class FileDescriptor < ::IO::FileDescriptor
-    @read_tasks = Channel(IOTask?).new
+    include AsyncIO
 
-    @write_tasks = Channel(IOTask?).new
+    @read_tasks = Channel(IOTask).new
+
+    @write_tasks = Channel(IOTask).new
 
     def initialize(@fd : Int32, blocking = false, @edge_triggerable : Bool = false)
       @closed = false
@@ -31,11 +34,11 @@ module AsyncAwait
     end
 
     def resume_read(timeout : Bool)
-      tcs = TaskCompletionSource(IOTask?).new
+      tcs = TaskCompletionSource(IOTask).new
 
       @read_tasks.receive(tcs)
 
-      unless tcs.try_set_value? nil
+      unless tcs.try_set_exception? Exception.new
         task = tcs.task.value.not_nil!
         task.do_work(self, timeout)
       end
@@ -67,11 +70,11 @@ module AsyncAwait
     end
 
     def resume_write(timeout : Bool)
-      tcs = TaskCompletionSource(IOTask?).new
+      tcs = TaskCompletionSource(IOTask).new
 
       @write_tasks.receive(tcs)
 
-      unless tcs.try_set_value? nil
+      unless tcs.try_set_exception? Exception.new
         task = tcs.task.value.not_nil!
         task.do_work(self, timeout)
       end
@@ -105,6 +108,22 @@ module AsyncAwait
         AAThread.current.event_base.not_nil!.run_once
       end
       task.value
+    end
+
+    def read_async(slice : Bytes)
+      AAThread.current.try do |th|
+        th.add_io_proc
+        th.add_write_event(self)
+      end
+      ReadTask.new(slice, 0, false).tap { |task| @read_tasks.send task }
+    end
+
+    def write_async(slice : Bytes)
+      AAThread.current.try do |th|
+        th.add_io_proc
+        th.add_write_event(self)
+      end
+      WriteTask.new(slice, 0, true).tap { |task| @write_tasks.send task }
     end
 
     private abstract class IOTask < Task(Int32)

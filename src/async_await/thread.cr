@@ -21,10 +21,11 @@ module AsyncAwait
     @exception : Exception?
     @detached = false
     @eb : Event::Base?
+    @closed = Atomic(Int32).new 0
 
-    getter channel = Channel(->).new
+    protected getter channel = Channel(->).new
 
-    def initialize(&@func : ->)
+    def initialize(@would_stop : Bool = true, &@func : ->)
       @eb = ::Event::Base.new
       @@threads << self
 
@@ -39,6 +40,7 @@ module AsyncAwait
     end
 
     def initialize
+      @would_stop = true
       @func = ->{}
       @@threads << self
       @th = LibC.pthread_self
@@ -63,6 +65,13 @@ module AsyncAwait
 
       if exception = @exception
         raise exception
+      end
+    end
+
+    protected def add_io_proc
+      return if is_main?
+      @channel.send ->do
+        @eb.not_nil!.run_loop
       end
     end
 
@@ -144,7 +153,12 @@ module AsyncAwait
       self == @@main
     end
 
+    def is_current?
+      typeof(self).current == self
+    end
+
     def post(proc)
+      return if @closed.get() == 1 && !is_current?
       @channel.send proc
       if is_main?
         @eb.try &.once_event -1, LibEvent2::EventFlags::Timeout, @channel.as(Void*) do |s, flags, data|
@@ -168,17 +182,23 @@ module AsyncAwait
         @func.call
 
         # run task
-        while (task = @channel.receive?).try &.status.completed?
-          task.try &.value.call
-        end
+        if @would_stop
+          while (task = @channel.receive?).try &.status.completed?
+            task.try &.value.call
+          end
 
-        @channel.close
+          @closed.set 1
 
-        # clean last task
-        task ||= @channel.receive?
-        while task.try &.status.completed?
-          task.try &.value.call
-          task = @channel.receive?
+          # clean last task
+          task ||= @channel.receive?
+          while task.try &.status.completed?
+            task.try &.value.call
+            task = @channel.receive?
+          end
+        else
+          loop do
+            @channel.receive.value.call
+          end
         end
       rescue ex
         @exception = ex
