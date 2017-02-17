@@ -17,7 +17,15 @@ private class TimedTask < Task(Nil)
     wait
   end
 
+  def value? : Nil
+    wait
+  end
+
   def value_with_csp : Nil
+    wait_with_csp
+  end
+
+  def value_with_csp? : Nil
     wait_with_csp
   end
 

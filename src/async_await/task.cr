@@ -24,13 +24,17 @@ module AsyncAwait
     # Raised exception if `status` is faulted.
     abstract def value_with_csp : T
 
+    # Returns value when `wait_with_csp` is completed.
+    # Nil if `status` is faulted.
+    abstract def value_with_csp? : T?
+
     # Busy wait for task is completed.
     def wait
-      wait { next }
+      wait_impl { next }
     end
 
     # Yield block when task is incomplete.
-    def wait
+    def wait_impl
       while status.incomplete?
         yield
       end
@@ -38,12 +42,12 @@ module AsyncAwait
 
     # Busy wait by `Fiber#yield`.
     def wait_with_csp
-      wait { Fiber.yield }
+      wait_impl { Fiber.yield }
     end
   end
 
   private class TaskImpl(T) < Task(T)
-    @value = uninitialized T
+    @value : T?
     @status : Status
     getter exception : Exception?
     protected property proc : ->
@@ -70,6 +74,18 @@ module AsyncAwait
       end
     end
 
+    def value?
+      wait
+      case @status
+      when Status::COMPLETED
+        return @value.as(T)
+      when Status::FAULTED
+        return nil
+      else
+        raise InvalidStatus.new
+      end
+    end
+
     def start
       @proc.call
     end
@@ -86,6 +102,18 @@ module AsyncAwait
         return @value.as(T)
       when Status::FAULTED
         raise @exception.not_nil!
+      else
+        raise InvalidStatus.new
+      end
+    end
+
+    def value_with_csp?
+      wait_with_csp
+      case @status
+      when Status::COMPLETED
+        return @value.as(T)
+      when Status::FAULTED
+        return nil
       else
         raise InvalidStatus.new
       end

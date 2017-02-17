@@ -14,6 +14,9 @@ private class YieldAwaitable
   def value : Nil
   end
 
+  def value? : Nil
+  end
+
   def exception : Nil
   end
 

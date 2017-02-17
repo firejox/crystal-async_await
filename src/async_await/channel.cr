@@ -45,20 +45,14 @@ module AsyncAwait
     end
 
     # Send value into channel. It returns `Task` for waiting send operation completed.
-    # Raise `ClosedError` if closed.
+    # `Task#status` will be fault and with `ClosedError` if closed.
     #
     # ```
     # channel = AAChannel(Int32).new 1
     # await channel.send 2 # => 2
     # ```
     def send(value : T)
-      send_impl(value) { raise ClosedError.new }
-    end
-
-    # Send value into channel. It returns `Task` for waiting send operation completed.
-    # Returns `nil` if closed.
-    def send?(value : T)
-      send_impl(value) { break nil }
+      send_impl(value) { return Task(T).from_exception ClosedError.new }
     end
 
     protected def send_impl(value : T)
@@ -89,7 +83,7 @@ module AsyncAwait
     end
 
     # Send value into channel with given `TaskCompletionSource`. It allow to cancel send
-    # by `TaskCompletionSource`. Raise `ClosedError` if closed.
+    # by `TaskCompletionSource`.
     #
     # ```
     # ch = AAChannel(Int32).new 1
@@ -98,15 +92,6 @@ module AsyncAwait
     # await tcs.task # => 1
     # ```
     def send(value : T, wait_tcs)
-      send_impl(value, wait_tcs) do
-        wait_tcs.try_set_exception? ClosedError.new
-        raise ClosedError.new
-      end
-    end
-
-    # Send value into channel with given `TaskCompletionSource`. It allow to cancel send
-    # by `TaskCompletionSource`. Returns `nil` if closed.
-    def send?(value : T, wait_tcs)
       send_impl(value, wait_tcs) do
         wait_tcs.try_set_exception? ClosedError.new
         break nil
@@ -150,7 +135,7 @@ module AsyncAwait
     end
 
     # receive value from channel. It returns `Task` for waiting receive operation completed.
-    # Raise `ClosedError` if closed.
+    # `Task#status` will be fault and with `ClosedError` if closed.
     #
     # ```
     # ch = AAChannel(Int32).new
@@ -158,13 +143,7 @@ module AsyncAwait
     # await ch.receive # => 1
     # ```
     def receive
-      receive_impl { raise ClosedError.new }
-    end
-
-    # Recieve value from channel. It returns `Task` for waiting receive operation completed.
-    # Returns `nil` if closed.
-    def receive?
-      receive_impl { break nil }
+      receive_impl { return Task(T).from_exception ClosedError.new }
     end
 
     protected def receive_impl
@@ -190,7 +169,7 @@ module AsyncAwait
     end
 
     # Receive value from channel with `TaskCompletionSource`. It allow to cancel receive
-    # by `TaskCompletionSource`. Raise `ClosedError` if closed.
+    # by `TaskCompletionSource`.
     #
     # ```
     # ch = AAChannel(Int32).new
@@ -200,15 +179,6 @@ module AsyncAwait
     # await tcs.task # => 1
     # ```
     def receive(tcs)
-      receive_impl(tcs) do
-        tcs.try_set_exception? ClosedError.new
-        raise ClosedError.new
-      end
-    end
-
-    # Receive value from channel with `TaskCompletionSource`. It allow to cancel receive
-    # by `TaskCompletionSource`. Returns `nil` if closed.
-    def receive?(tcs)
       receive_impl(tcs) do
         tcs.try_set_exception? ClosedError.new
         break nil
@@ -266,7 +236,7 @@ module AsyncAwait
     # Send value into channel and wait for completed by `TaskInterface#value_with_csp`.
     # Returns `nil` if closed.
     def send_with_csp?(value : T)
-      send?(value).try &.value_with_csp
+      send(value).value_with_csp?
     end
 
     # Receive value from channel and wait for completed by `TaskInterface#value_with_csp`.
@@ -284,7 +254,7 @@ module AsyncAwait
     # Receive value from channel and wait for completed by `TaskInterface#value_with_csp`.
     # Returns `nil` if closed.
     def receive_with_csp? : T?
-      receive?.try &.value_with_csp
+      receive.value_with_csp?
     end
 
     # Close channel. It is able to receive value if there are remaining send values.
@@ -353,13 +323,13 @@ module AsyncAwait
 
     protected def acquire_priority
       @priority_lock.synchronize do |mtx|
-        @priority = Random.rand(UInt64::MAX) if @priority_ref_count == 0
+        @priority = rand(UInt64::MAX) if @priority_ref_count == 0
         @priority_ref_count += 1
         return @priority
       end
     end
 
-    protected def release_priority
+    protected def release_priority : Nil
       @priority_lock.synchronize do |mtx|
         @priority_ref_count -= 1
       end
@@ -376,7 +346,7 @@ module AsyncAwait
     # ```
     def self.receive_first(*channels : Channel(T)) forall T
       tcs = TaskCompletionSource(T).new
-      channels.each &.receive?(tcs)
+      channels.each &.receive(tcs)
       tcs.task
     end
 
@@ -384,7 +354,7 @@ module AsyncAwait
     # completed.
     def self.receive_first(channels : Array(Channel(T))) forall T
       tcs = TaskCompletionSource(T).new
-      channels.each &.receive?(tcs)
+      channels.each &.receive(tcs)
       tcs.task
     end
 
@@ -419,7 +389,7 @@ module AsyncAwait
     # ```
     def self.send_first(value : T, *channels : Channel(T)) forall T
       wait_tcs = TaskCompletionSource(T).new
-      channels.each &.send?(value, wait_tcs)
+      channels.each &.send(value, wait_tcs)
       wait_tcs.task
     end
 
@@ -427,7 +397,7 @@ module AsyncAwait
     # completed.
     def self.send_first(value : T, channels : Array(Channel(T))) forall T
       wait_tcs = TaskCompletionSource(T).new
-      channels.each &.send?(value, wait_tcs)
+      channels.each &.send(value, wait_tcs)
       wait_tcs.task
     end
 
@@ -567,10 +537,7 @@ module AsyncAwait
           nil
         } }
         @actions << tuple
-        @cleanup_actions << ->{
-          ch.release_priority
-          nil
-        }
+        @cleanup_actions << ->ch.release_priority
       end
 
       def add_receive_action(ch : Channel(T), &block : T ->) forall T
@@ -580,10 +547,7 @@ module AsyncAwait
           nil
         } }
         @actions << tuple
-        @cleanup_actions << ->{
-          ch.release_priority
-          nil
-        }
+        @cleanup_actions << ->ch.release_priority
       end
 
       protected def run
@@ -614,6 +578,10 @@ module AsyncAwait
           end
         end
 
+        def value? : Nil
+          wait
+        end
+
         def value_with_csp
           wait_with_csp
           if @status.completed?
@@ -621,6 +589,10 @@ module AsyncAwait
           else
             raise @exception.not_nil!
           end
+        end
+
+        def value_with_csp?
+          wait_with_csp
         end
 
         def exception

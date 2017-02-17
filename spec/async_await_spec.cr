@@ -8,11 +8,17 @@ end
 
 private class Foo
   getter ch = AAChannel(String).new
+  getter num : Int32?
 
   async def bar
     await Task.delay(Time::Span.new(0, 0, 1))
     await ch.receive
     await ch.send "Crystal!"
+  end
+
+  async def bar2
+    @num = 123
+    @num = await? Task(Int32).from_exception Exception.new
   end
 end
 
@@ -39,5 +45,11 @@ describe AsyncAwait do
 
   it "work in main thread" do
     foo.value_with_csp.not_nil!.should be >= Time::Span.new(0, 0, 1)
+  end
+
+  it "await? fault task will be nil" do
+    a = Foo.new
+    a.bar2
+    a.num.should be_nil
   end
 end

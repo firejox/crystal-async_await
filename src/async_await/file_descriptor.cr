@@ -145,6 +145,18 @@ module AsyncAwait
         end
       end
 
+      def value? : Int32?
+        wait
+        case @status
+        when Status::COMPLETED
+          return @complete_cnt
+        when Status::FAULTED
+          return nil
+        else
+          raise InvalidStatus.new
+        end
+      end
+
       def value_with_csp : Int32
         wait_with_csp
         case @status
@@ -152,6 +164,18 @@ module AsyncAwait
           return @complete_cnt
         when Status::FAULTED
           raise @exception.not_nil!
+        else
+          raise InvalidStatus.new
+        end
+      end
+
+      def value_with_csp? : Int32?
+        wait_with_csp
+        case @status
+        when Status::COMPLETED
+          return @complete_cnt
+        when Status::FAULTED
+          return nil
         else
           raise InvalidStatus.new
         end

@@ -158,7 +158,7 @@ module AsyncAwait
     end
 
     def post(proc)
-      return if @closed.get() == 1 && !is_current?
+      return if @closed.get == 1 && !is_current?
       @channel.send proc
       if is_main?
         @eb.try &.once_event -1, LibEvent2::EventFlags::Timeout, @channel.as(Void*) do |s, flags, data|
@@ -183,17 +183,16 @@ module AsyncAwait
 
         # run task
         if @would_stop
-          while (task = @channel.receive?).try &.status.completed?
-            task.try &.value.call
+          while (task = @channel.receive).status.completed?
+            task.value.call
           end
 
           @closed.set 1
 
           # clean last task
-          task ||= @channel.receive?
-          while task.try &.status.completed?
-            task.try &.value.call
-            task = @channel.receive?
+          while task.status.completed?
+            task.value.call
+            task = @channel.receive
           end
         else
           loop do
@@ -202,6 +201,8 @@ module AsyncAwait
         end
       rescue ex
         @exception = ex
+      ensure
+        @closed.set 1
       end
     end
   end

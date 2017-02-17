@@ -14,6 +14,7 @@ module AsyncAwait
 
   module Awaitable
     abstract def value
+    abstract def value?
     abstract def status : Status
     abstract def exception
   end

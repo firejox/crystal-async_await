@@ -105,19 +105,26 @@ describe AAChannel do
     expect_raises(Channel::ClosedError) { ch.receive_with_csp }
   end
 
-  it "cannot send if closed" do
+  it "'s Task#value raise ClosedError if closed" do
     ch = AAChannel(Int32).new
     ch.close
-    expect_raises(Channel::ClosedError) { ch.send 123 }
+    expect_raises(Channel::ClosedError) { ch.receive.value }
+    expect_raises(Channel::ClosedError) { ch.send(123).value }
   end
 
-  it "can receive? when closed" do
+  it "cannot send_with_csp if closed" do
+    ch = AAChannel(Int32).new
+    ch.close
+    expect_raises(Channel::ClosedError) { ch.send_with_csp 123 }
+  end
+
+  it "can receive_with_csp? when closed" do
     ch = AAChannel(Int32).new
     ch.close
     ch.receive_with_csp?.should be_nil
   end
 
-  it "can receive? when not empty" do
+  it "can receive_with_csp? when not empty" do
     ch = AAChannel(Int32).new
     spawn { ch.send_with_csp 123 }
     ch.receive_with_csp?.should eq(123)
